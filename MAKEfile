@@ -1,0 +1,16 @@
+# Make file permet de lancer en amont nos élements de nos librairies
+# Il va nous lancer directement nos elemnts mis en bas en appelant le fichier avec make et la fonction 
+# Par exemple en line de commande > make format
+
+install:
+	pip install --upgrade pip
+	pip install - r requirements.txt
+
+format:
+# format
+	black -l 100 **/*.py
+
+lint : 
+	pylint --disable=C0301,C0412, C0103 **/*.py
+
+precommit: format lint
