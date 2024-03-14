@@ -2,6 +2,12 @@
 # Il va nous lancer directement nos elemnts mis en bas en appelant le fichier avec make et la fonction 
 # Par exemple en line de commande > make format
 
+
+# Sur windows installer make file avec ces commandes
+# iwr -useb get.scoop.sh | iex
+# scoop install make
+
+
 install:
 	pip install --upgrade pip
 	pip install - r requirements.txt
