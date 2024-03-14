@@ -1,7 +1,8 @@
-'''Training the model
-'''
+"""Training the model
+"""
 import pandas as pd
 import numpy as np
+
 pd.options.display.max_columns = 100
 pd.options.display.max_rows = 60
 pd.options.display.max_colwidth = 100
@@ -13,7 +14,6 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, accuracy_score
 
 
-# adding
 import mlflow
 
 remote_server_uri = "http://localhost:8088"
@@ -48,13 +48,13 @@ rf = RandomForestClassifier()
 
 # Define the parameter grid
 param_grid = {
-    "n_estimators": [200, 300],  # Number of trees
-    "max_depth": [10],  # Maximum depth of the trees
-    "min_samples_leaf": [1, 5],  # Maximum depth of the trees
+    "n_estimators": [400],  # Number of trees
+    "max_depth": [2, 4],  # Maximum depth of the trees
+    "min_samples_leaf": [2],  # Maximum depth of the trees
 }
 
 # Setup GridSearchCV with k-fold cross-validation
-cv = KFold(n_splits=3, random_state=84, shuffle=True)
+cv = KFold(n_splits=3, random_state=42, shuffle=True)
 
 grid_search = GridSearchCV(
     estimator=rf, param_grid=param_grid, cv=cv, scoring="accuracy", verbose=1
