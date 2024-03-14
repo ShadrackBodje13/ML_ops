@@ -12,6 +12,18 @@ from sklearn.model_selection import train_test_split, GridSearchCV, KFold
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, accuracy_score
 
+
+# adding
+import mlflow
+
+remote_server_uri = "http://localhost:8088"
+mlflow.set_tracking_uri(remote_server_uri)
+
+# set experiment
+mlflow.set_experiment("experiment_01")
+
+mlflow.sklearn.autolog()
+
 # load data
 input_file = "./data/dpe_processed_20240314.csv"
 data = pd.read_csv(input_file)
