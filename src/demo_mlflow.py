@@ -1,7 +1,7 @@
 import mlflow
 
 # set to your server URI
-remote_server_uri = "http://localhost:8088"
+remote_server_uri = "http://localhost:8080"
 mlflow.set_tracking_uri(remote_server_uri)
 
 # set experiment
