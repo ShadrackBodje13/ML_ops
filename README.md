@@ -52,3 +52,40 @@ Sur Windows avec powershell : Invoke-WebRequest -Uri 'https://data.ademe.fr/data
 <!-- Recuperer les données -->
 Créer un dossier api dans lequel on crée un fichier url.json
 Rcuprer et stocker les données dans notre dossier (regarder build_dataset_01.py)
+
+
+
+<!-- AIR FLOW pour le CI/CD, il est un orchestrateur -->
+https://airflow.apache.org/
+
+Le créer aillerus de notre projet (à la racine de preference)
+creer la variable d'environnement sur windows
+> set AIRFLOW_HOME=~/airflow (vous pouvez changer le dossier, C:\MASTER\Master2\MachineLearningOPS\MLOps_github\airflow)
+Savoir si la variable est declarée
+> echo %AIRFLOW_HOME% 
+
+
+Prendre docker yaml
+-> curl -LfO 'https://airflow.apache.org/docs/apache-airflow/2.8.3/docker-compose.yaml'
+> windows : Invoke-WebRequest -Uri 'https://airflow.apache.org/docs/apache-airflow/2.8.3/docker-compose.yaml' -OutFile 'docker-compose.yaml'
+
+Lancer docker compose
+docker compose up airflow-init
+puis docker compose up  
+
+> Lancer le site qui nous parvient 
+Identifiant airflow|airflow
+
+<!-- Ensuite choisir un workflow qui nous convient sinon le coder -->
+
+> http://0.0.0.0:8080/dags/tutorial/grid?tab=code
+
+Se diriger dans le repertoire Airflow
+puis logs (pour voir les dag qu'on a activé)
+
+<!-- Install Airflow dans notre -->
+> pip install apache-airflow
+
+<!-- Creation de notre workflow avec airflow -->
+> Creation du dossier dags 
+> creation du fichier de notre dags flow puis code
