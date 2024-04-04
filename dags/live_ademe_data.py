@@ -4,6 +4,8 @@ import json
 from urllib.parse import urlparse, parse_qs
 import requests
 
+import re
+
 from datetime import datetime, timedelta
 import time
 
@@ -22,8 +24,12 @@ DOWNLOADED_FILES_PATH = os.path.join(DATA_PATH, "ademe-dpe-tertiaire")
 URL_FILE = os.path.join(DATA_PATH, "api", "url.json")
 RESULTS_FILE = os.path.join(DATA_PATH, "api", "results.json")
 
-CONTAINER_NAME = "ademe-dpe-tertiaire"
-ACCOUNT_NAME = "skatai4ademe4mlops"
+
+# Les elements de notre azure
+# CONTAINER_NAME = "ademe-dpe-tertiaire"
+CONTAINER_NAME = "mlopscontainer"
+# ACCOUNT_NAME = "skatai4ademe4mlops"
+ACCOUNT_NAME = "shadmlops"
 
 from airflow.models import Variable
 try:
@@ -34,8 +40,8 @@ except:
 def check_environment_setup():
     logger.info("--" * 20)
     logger.info(f"[info logger] cwd: {os.getcwd()}")
-    assert os.path.isfile(URL_FILE)
     logger.info(f"[info logger] URL_FILE: {URL_FILE}")
+    assert os.path.isfile(URL_FILE)
     logger.info("--" * 20)
 
 def interrogate_api():
@@ -154,6 +160,128 @@ def upload_data():
 
             logger.info("Upload completed")
 
+
+def rename_columns(columns: t.List[str]) -> t.List[str]:
+
+    """
+
+    rename columns
+
+    """
+
+
+    columns = [col.lower() for col in columns]
+
+
+    rgxs = [
+
+        (r"[°|/|']", "_"),
+
+        (r"²", "2"),
+
+        (r"[(|)]", ""),
+
+        (r"é|è", "e"),
+
+        (r"â", "a"),
+
+        (r"^_", "dpe_"),
+
+        (r"_+", "_"),
+
+    ]
+
+    for rgx in rgxs:
+
+        columns = [re.sub(rgx[0], rgx[1], col) for col in columns]
+
+
+    return columns
+
+# Etape de cleanup pour ne garder que N fichiers dans le folder data/ apres chqaue interaction avec l'API de Ademe 
+
+def cleanup_local_data(*op_args):
+    """
+    removes downloaded files only keeps {keep_n}
+    """
+    keep_n = 4
+    container_client_ = op_args[0]
+
+    # List all blobs in the container
+    blobs_list = [file["name"] for file in container_client_.list_blobs()]
+
+    # get all data files on local
+    local_data_files = sorted(glob.glob(f"{DOWNLOADED_FILES_PATH}/*.json"))
+    local_data_files = local_data_files[:-keep_n]
+    # delete all files on local that are in the container
+
+    for filename in local_data_files:
+        blob_name = filename.split("/")[-1]
+        if blob_name in blobs_list:
+            print(blob_name)
+
+            try:
+                os.remove(filename)
+            except Exception as e:
+                print(f"Error occurred: {e}.")
+
+
+# fonction de sauvegarde dans la bdd 
+# load les data depuis results.json
+# rename les colonnes
+# cast as string + empty  as ""
+# save to db
+
+def save_postgresdb():
+    assert os.path.isfile(RESULTS_FILE)
+
+    # read previous API call output
+    with open(RESULTS_FILE, encoding="utf-8") as file:
+        data = json.load(file)
+
+    data = pd.DataFrame(data["results"])
+    
+    # set columns
+    new_columns = rename_columns(data.columns)
+    data.columns = new_columns
+    data = data.astype(str).replace("nan", "")
+
+    # now check that the data does not have columns not already in the table
+    db = Database()
+    check_cols_query = """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+        AND table_name   = 'dpe_tertiaire';
+    """
+    table_cols = pd.read_sql(check_cols_query, con=db.engine)
+    table_cols = [col for col in table_cols["column_name"] if col != "id"]
+
+    # drop data columns not in table_cols
+    for col in data.columns:
+        if col not in table_cols:
+            data.drop(columns=[col], inplace=True)
+            logger.info(f"dropped column {col} from dataset")
+
+    # add empty columns in data that are in the table
+    for col in table_cols:
+        if col not in data.columns:
+            if col in ["created_at", "modified_at"]:
+                data[col] = datetime.now()
+            else:
+                data[col] = ""
+            logger.info(f"added column {col} in data")
+
+    # data = data[table_cols].copy()
+    assert sorted(data.columns) == sorted(table_cols)
+
+    logger.info(f"loaded {data.shape}")
+
+    # to_sql
+    data.to_sql(name="dpe_tertiaire", con=db.engine, if_exists="append", index=False)
+    db.close()
+    
+    
 
 
 default_args = {
