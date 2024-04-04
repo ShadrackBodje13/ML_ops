@@ -33,6 +33,8 @@ pip install mlflow
 
 <!-- En dehors de notre dossier github, on peut lancer notre projet -->
 mlflow server --host 0.0.0.0 --port 8088
+ou 
+mlflow server --host localhost --port 9090
 
 <!-- Lancer le mlflow -->
 python .\src\demo_mlflow.py
@@ -89,3 +91,9 @@ puis logs (pour voir les dag qu'on a activé)
 <!-- Creation de notre workflow avec airflow -->
 > Creation du dossier dags 
 > creation du fichier de notre dags flow puis code
+
+
+
+<!-- ---------------------------------Reprise -->
+A chaque reprise faire tourner mlflow et airflow en local
+Relancer docker. 

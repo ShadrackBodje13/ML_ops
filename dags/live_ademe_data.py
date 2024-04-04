@@ -5,10 +5,12 @@ from urllib.parse import urlparse, parse_qs
 import requests
 
 from datetime import datetime, timedelta
+import time
+
+import glob
+from azure.storage.blob import BlobServiceClient
 
 from airflow.models.dag import DAG
-
-from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
 
 import logging
@@ -20,14 +22,20 @@ DOWNLOADED_FILES_PATH = os.path.join(DATA_PATH, "ademe-dpe-tertiaire")
 URL_FILE = os.path.join(DATA_PATH, "api", "url.json")
 RESULTS_FILE = os.path.join(DATA_PATH, "api", "results.json")
 
+CONTAINER_NAME = "ademe-dpe-tertiaire"
+ACCOUNT_NAME = "skatai4ademe4mlops"
+
+from airflow.models import Variable
+try:
+    ACCOUNT_KEY = Variable.get("STORAGE_BLOB_ADEME_MLOPS")
+except:
+    ACCOUNT_KEY = os.environ.get("STORAGE_BLOB_ADEME_MLOPS")
 
 def check_environment_setup():
     logger.info("--" * 20)
     logger.info(f"[info logger] cwd: {os.getcwd()}")
     assert os.path.isfile(URL_FILE)
-    assert os.path.isfile(RESULTS_FILE)
     logger.info(f"[info logger] URL_FILE: {URL_FILE}")
-    logger.info(f"[info logger] RESULTS_FILE: {RESULTS_FILE}")
     logger.info("--" * 20)
 
 def interrogate_api():
@@ -60,6 +68,94 @@ def interrogate_api():
         json.dump(data, file, indent=4, ensure_ascii=False)
 
 
+def process_results():
+    """
+    Processes the results obtained from the previous API call,
+    updates the URL file,
+    and saves the data to a new file.
+
+    - Reads the results from a JSON file defined by the constant `RESULTS_FILE`.
+    - Extracts the base URL and payload from the 'next' field of the results.
+    - Updates the URL file with the same URL and the new payload.
+    - Saves the results data to a new JSON file with a filename containing a timestamp.
+
+    Raises:
+        AssertionError: If the results file does not exist.
+
+    """
+    # test url file exists
+    assert os.path.isfile(RESULTS_FILE)
+
+    # read previous API call output
+    with open(RESULTS_FILE, encoding="utf-8") as file:
+        data = json.load(file)
+
+    # new url is same as old url
+    base_url = data.get("next").split("?")[0]
+
+    # extract payload as dict
+    parsed_url = urlparse(data.get("next"))
+    query_params = parse_qs(parsed_url.query)
+    new_payload = {k: v[0] if len(v) == 1 else v for k, v in query_params.items()}
+
+    # save new url (same as old url) with new payload into url.json
+    new_url = {"url": base_url, "payload": new_payload}
+
+    with open(URL_FILE, "w", encoding="utf-8") as file:
+        json.dump(new_url, file, indent=4, ensure_ascii=False)
+
+    # saves data to data file
+    # append current timestamp (up to the second to the filename)
+    timestamp = int(time.time())
+    data_filename = os.path.join(DOWNLOADED_FILES_PATH, f"data_{timestamp}.json")
+
+    with open(data_filename, "w", encoding="utf-8") as file:
+        json.dump(data["results"], file, indent=4, ensure_ascii=False)
+
+def upload_data():
+    """
+    Uploads local data files to Azure Blob Storage container.
+
+    - Establishes a connection to the Azure Blob Storage using the provided account credentials.
+    - Retrieves the list of existing blobs in the specified container.
+    - Gets a list of local data files to upload.
+    - Uploads each local file to the container if it doesn't already exist.
+
+    Environment Variables:
+        STORAGE_BLOB_ADEME_MLOPS: Azure Storage account key.
+
+    """
+
+    connection_string = f"DefaultEndpointsProtocol=https;AccountName={ACCOUNT_NAME};"
+    connection_string += f"AccountKey={ACCOUNT_KEY};EndpointSuffix=core.windows.net"
+
+    blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+
+    container_client = blob_service_client.get_container_client(container=CONTAINER_NAME)
+
+    # List all blobs in the container
+    blobs_list = [file["name"] for file in container_client.list_blobs()]
+
+    # get all data files on local
+    local_data_files = glob.glob(f"{DOWNLOADED_FILES_PATH}/*.json")
+    for filename in local_data_files:
+        blob_name = filename.split("/")[-1]
+        if blob_name not in blobs_list:
+            # upload file to container
+            blob_client = blob_service_client.get_blob_client(
+                container=CONTAINER_NAME, blob=blob_name
+            )
+
+            logger.info("\nUploading to Azure Storage as blob:\n\t" + blob_name)
+
+            # Upload the created file
+            with open(filename, "rb") as data:
+                blob_client.upload_blob(data, overwrite=True)
+
+            logger.info("Upload completed")
+
+
+
 default_args = {
     "depends_on_past": False,
     "email": ["airflow@example.com"],
@@ -90,4 +186,14 @@ with DAG(
         python_callable=interrogate_api,
     )
 
-    check_environment_setup >> interrogate_api
+    process_results = PythonOperator(
+        task_id="process_results",
+        python_callable=process_results,
+    )
+
+    upload_data = PythonOperator(
+        task_id="upload_data",
+        python_callable=upload_data,
+    )
+
+    check_environment_setup >> interrogate_api >> process_results >> upload_data
